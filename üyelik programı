@@ -1,0 +1,197 @@
+import sqlite3
+import pandas as pd
+import os
+import tkinter as tk
+from tkinter import messagebox, filedialog
+from tkinter import ttk
+
+# Veritabanı bağlantısı
+DB_NAME = "uye_kayit.db"
+
+
+def veritabani_baglanti():
+    return sqlite3.connect(DB_NAME)
+
+
+# Tablo oluşturma
+def tablo_olustur():
+    conn = veritabani_baglanti()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS Uyeler (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ad TEXT NOT NULL,
+        soyad TEXT NOT NULL,
+        dogum_tarihi TEXT NOT NULL,
+        telefon TEXT NOT NULL,
+        saglik_durumu TEXT NOT NULL,
+        tc_no TEXT UNIQUE NOT NULL,
+        gorev TEXT NOT NULL,
+        sicil_no TEXT UNIQUE NOT NULL,
+        egitimler TEXT NOT NULL,
+        profil_resmi TEXT
+    )
+    """)
+
+    conn.commit()
+    conn.close()
+
+
+# Üye ekleme fonksiyonu
+def uye_ekle():
+    ad = ad_entry.get()
+    soyad = soyad_entry.get()
+    dogum_tarihi = dogum_entry.get()
+    telefon = telefon_entry.get()
+    saglik = saglik_entry.get()
+    tc_no = tc_entry.get()
+    gorev = gorev_entry.get()
+    sicil_no = sicil_entry.get()
+    egitim = egitim_entry.get()
+    profil_resmi = profil_resim_path.get()
+
+    if not ad or not soyad or not tc_no or not sicil_no:
+        messagebox.showwarning("Eksik Bilgi", "Lütfen tüm alanları doldurun!")
+        return
+
+    conn = veritabani_baglanti()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute("""
+        INSERT INTO Uyeler (ad, soyad, dogum_tarihi, telefon, saglik_durumu, tc_no, gorev, sicil_no, egitimler, profil_resmi)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (ad, soyad, dogum_tarihi, telefon, saglik, tc_no, gorev, sicil_no, egitim, profil_resmi))
+
+        conn.commit()
+        messagebox.showinfo("Başarılı", "Üye başarıyla eklendi!")
+        listele()
+    except sqlite3.IntegrityError:
+        messagebox.showerror("Hata", "Bu TC No veya Sicil No zaten kayıtlı!")
+
+    conn.close()
+
+
+# Üye Silme Fonksiyonu
+def uye_sil():
+    secilen = uye_listesi.selection()
+    if not secilen:
+        messagebox.showwarning("Seçim Yapılmadı", "Lütfen silinecek üyeyi seçin!")
+        return
+
+    tc_no = uye_listesi.item(secilen)["values"][4]
+
+    conn = veritabani_baglanti()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM Uyeler WHERE tc_no = ?", (tc_no,))
+    conn.commit()
+    conn.close()
+
+    messagebox.showinfo("Silindi", "Üye başarıyla silindi!")
+    listele()
+
+
+# Üyeleri Listeleme Fonksiyonu
+def listele():
+    conn = veritabani_baglanti()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT ad, soyad, dogum_tarihi, telefon, tc_no FROM Uyeler")
+    uyeler = cursor.fetchall()
+
+    conn.close()
+
+    uye_listesi.delete(*uye_listesi.get_children())
+    for uye in uyeler:
+        uye_listesi.insert("", "end", values=uye)
+
+
+# Excel'e Aktarma Fonksiyonu
+def uyeleri_excel_aktar():
+    dosya_adi = filedialog.asksaveasfilename(defaultextension=".xlsx", filetypes=[("Excel Dosyası", "*.xlsx")])
+
+    if not dosya_adi:
+        return
+
+    conn = veritabani_baglanti()
+    df = pd.read_sql_query("SELECT * FROM Uyeler", conn)
+    conn.close()
+
+    df.to_excel(dosya_adi, index=False)
+    messagebox.showinfo("Başarılı", "Üyeler başarıyla Excel'e aktarıldı!")
+
+
+# Profil Resmi Seçme Fonksiyonu
+def profil_resim_sec():
+    dosya_yolu = filedialog.askopenfilename(filetypes=[("Resim Dosyaları", "*.png;*.jpg;*.jpeg")])
+    if dosya_yolu:
+        profil_resim_path.set(dosya_yolu)
+
+
+# Tkinter Arayüzü
+root = tk.Tk()
+root.title("Üye Kayıt Sistemi")
+root.geometry("700x500")
+
+# Giriş alanları
+tk.Label(root, text="Ad:").grid(row=0, column=0)
+ad_entry = tk.Entry(root)
+ad_entry.grid(row=0, column=1)
+
+tk.Label(root, text="Soyad:").grid(row=1, column=0)
+soyad_entry = tk.Entry(root)
+soyad_entry.grid(row=1, column=1)
+
+tk.Label(root, text="Doğum Tarihi:").grid(row=2, column=0)
+dogum_entry = tk.Entry(root)
+dogum_entry.grid(row=2, column=1)
+
+tk.Label(root, text="Telefon:").grid(row=3, column=0)
+telefon_entry = tk.Entry(root)
+telefon_entry.grid(row=3, column=1)
+
+tk.Label(root, text="Sağlık Durumu:").grid(row=4, column=0)
+saglik_entry = tk.Entry(root)
+saglik_entry.grid(row=4, column=1)
+
+tk.Label(root, text="TC No:").grid(row=5, column=0)
+tc_entry = tk.Entry(root)
+tc_entry.grid(row=5, column=1)
+
+tk.Label(root, text="Görev:").grid(row=6, column=0)
+gorev_entry = tk.Entry(root)
+gorev_entry.grid(row=6, column=1)
+
+tk.Label(root, text="Sicil No:").grid(row=7, column=0)
+sicil_entry = tk.Entry(root)
+sicil_entry.grid(row=7, column=1)
+
+tk.Label(root, text="Eğitim:").grid(row=8, column=0)
+egitim_entry = tk.Entry(root)
+egitim_entry.grid(row=8, column=1)
+
+profil_resim_path = tk.StringVar()
+tk.Label(root, text="Profil Resmi:").grid(row=9, column=0)
+tk.Button(root, text="Seç", command=profil_resim_sec).grid(row=9, column=1)
+
+# Butonlar
+tk.Button(root, text="Ekle", command=uye_ekle).grid(row=10, column=0, pady=5)
+tk.Button(root, text="Sil", command=uye_sil).grid(row=10, column=1, pady=5)
+tk.Button(root, text="Excel'e Aktar", command=uyeleri_excel_aktar).grid(row=10, column=2, pady=5)
+
+# Üye Listesi
+uye_listesi = ttk.Treeview(root, columns=("Ad", "Soyad", "Doğum Tarihi", "Telefon", "TC No"), show="headings")
+uye_listesi.heading("Ad", text="Ad")
+uye_listesi.heading("Soyad", text="Soyad")
+uye_listesi.heading("Doğum Tarihi", text="Doğum Tarihi")
+uye_listesi.heading("Telefon", text="Telefon")
+uye_listesi.heading("TC No", text="TC No")
+uye_listesi.grid(row=11, column=0, columnspan=3, pady=10)
+
+# Veritabanını oluştur ve listeyi güncelle
+tablo_olustur()
+listele()
+
+# Tkinter döngüsünü başlat
+root.mainloop()
